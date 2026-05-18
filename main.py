@@ -38,35 +38,57 @@ def save_config(cfg: dict):
         json.dump(cfg, f, indent=2)
 
 
-def get_cost_per_kwh() -> float:
+def setup_config() -> tuple:
+    """First-run wizard — asks for cost per kWh and currency symbol. Returns (cost, currency)."""
     cfg = load_config()
-    if "cost_per_kwh" in cfg:
-        return float(cfg["cost_per_kwh"])
+    cost = cfg.get("cost_per_kwh")
+    currency = cfg.get("currency")
 
-    # First run — ask user
+    needs_cost = cost is None
+    needs_currency = currency is None
+
+    if not needs_cost and not needs_currency:
+        return float(cost), currency
+
     print()
     print("  Welcome to ecost! Let's set your energy cost.")
     print()
 
-    while True:
-        raw = input("  Cost per 1 kWh at your location? (e.g. 0.12 for $0.12, or 90 for Rs.90): ")
-        try:
-            cost = float(raw)
-            if cost < 0:
-                print("  Please enter a positive number.")
-                continue
-            save_config({"cost_per_kwh": cost})
-            print(f"  Saved! Your cost: {cost}/kWh")
-            print()
-            time.sleep(1)
-            return cost
-        except ValueError:
-            print("  Please enter a valid number.")
+    if needs_cost:
+        while True:
+            raw = input("  Cost per 1 kWh (e.g. 0.12, 90): ")
+            try:
+                cost = float(raw)
+                if cost < 0:
+                    print("  Please enter a positive number.")
+                    continue
+                break
+            except ValueError:
+                print("  Please enter a valid number.")
+
+    if needs_currency:
+        while True:
+            currency = input("  Currency symbol (e.g. Rs., $, €, ¥): ").strip()
+            if currency:
+                break
+            print("  Please enter a symbol.")
+
+    new_cfg = load_config()
+    if needs_cost:
+        new_cfg["cost_per_kwh"] = cost
+    if needs_currency:
+        new_cfg["currency"] = currency
+    save_config(new_cfg)
+
+    print(f"  Saved! Cost: {currency}{float(new_cfg['cost_per_kwh'])}/kWh")
+    print()
+    time.sleep(1)
+    return float(new_cfg["cost_per_kwh"]), new_cfg["currency"]
 
 
-def get_currency() -> str:
-    cfg = load_config()
-    return cfg.get("currency", "$")
+def load_cost() -> tuple:
+    """Load cost and currency from config (runs wizard on first start)."""
+    return setup_config()
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +353,7 @@ def curses_main(stdscr, args):
                 pad.erase()
                 draw_line(pad, max_y // 2, 2, "Enter new cost per kWh (or press Esc to cancel):",
                          curses.color_pair(C_CYAN) | curses.A_BOLD)
-                draw_line(pad, max_y // 2 + 1, 4, f"Current: {args.cost_per_kwh}/kWh",
+                draw_line(pad, max_y // 2 + 1, 4, f"Current: {args.currency}{args.cost_per_kwh}/kWh",
                          curses.color_pair(C_WHITE))
                 pad.noutrefresh(0, 0, 0, 0, max_y - 1, max_x - 1)
                 curses.doupdate()
@@ -346,7 +368,9 @@ def curses_main(stdscr, args):
                         new_cost = float(raw)
                         if new_cost >= 0:
                             args.cost_per_kwh = new_cost
-                            save_config({"cost_per_kwh": new_cost})
+                            new_cfg = load_config()
+                            new_cfg["cost_per_kwh"] = new_cost
+                            save_config(new_cfg)
                             needs_redraw = True
                 except ValueError:
                     pass
@@ -424,8 +448,18 @@ def curses_main(stdscr, args):
             info_attr = curses.color_pair(C_CYAN) | curses.A_BOLD
             draw_line(pad, info_y, 2, info_big[:max_x - 3], info_attr)
 
+            # ---- Requirements warning if no sensors available ----
+            has_gpu = any(g.available() for g in reader.gpus)
+            has_rapl = hasattr(reader.cpu, '_has_rapl') and getattr(reader.cpu, '_has_rapl', False)
+            if not has_gpu and not has_rapl:
+                warn_y = info_y + 1
+                draw_line(pad, warn_y, 2, "  [!] Requires Linux + NVIDIA GPU for accurate readings",
+                         curses.color_pair(C_ORANGE) | curses.A_BOLD)
+
             # Small text below: cost, time, temp
             detail_y = info_y + 1
+            if not has_gpu and not has_rapl:
+                detail_y += 1  # skip warning line
             cost_str = format_cost(cost, args.currency)
             time_str = format_time(elapsed)
             temp_str = f"{cpu_temp:.0f}C" if cpu_temp else "--C"
@@ -433,8 +467,17 @@ def curses_main(stdscr, args):
             draw_line(pad, detail_y, 2, detail_line,
                      curses.color_pair(C_WHITE) | curses.A_BOLD)
 
-            # ---- Primary panels (GPU, CPU, RAM) ----
+           # ---- Primary panels (GPU, CPU, RAM) ----
             panel_y = detail_y + 1  # after detail line
+
+            # If no sensors at all, show placeholder panels explaining requirements
+            if not primary and not storage:
+                primary = [
+                    PowerReading(component="GPU (none)", power_watts=0, energy_wh=0, timestamp=now),
+                    PowerReading(component="CPU (est.)", power_watts=0, energy_wh=0, timestamp=now),
+                    PowerReading(component="DRAM (est.)", power_watts=0, energy_wh=0, timestamp=now),
+                ]
+
             panel_w = max(PANEL_MIN_W, (max_x - 6) // max(len(primary), 1))
             panel_w = min(panel_w, 24)
             num_cols = max(1, (max_x - 2) // panel_w)
@@ -538,9 +581,8 @@ def main():
     parser.add_argument("-i", "--interval", type=int, default=1000, help="Polling interval in ms")
     args = parser.parse_args()
 
-    # Get cost from config (prompts on first run)
-    cost = get_cost_per_kwh()
-    curr = get_currency()
+    # Load cost + currency (prompts on first run)
+    cost, curr = load_cost()
 
     class Args:
         interval = args.interval
