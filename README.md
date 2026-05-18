@@ -1,4 +1,4 @@
-# Energy Tracker — Terminal Edition
+# ecost — Terminal Energy Tracker
 
 A real-time system power monitor for the terminal — inspired by [nvtop](https://github.com/Syllo/nvtop).
 
@@ -13,7 +13,7 @@ Displays instantaneous power consumption of **GPU(s)**, **CPU** (RAPL), **DRAM**
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - NVIDIA GPU with NVML support (optional, GPU panel hides if unavailable)
 - Linux (for RAPL `/sys/class/powercap`)
 - `curses` (built into Python on Linux)
@@ -22,13 +22,21 @@ Displays instantaneous power consumption of **GPU(s)**, **CPU** (RAPL), **DRAM**
 
 ```bash
 cd terminal-energy-tracker
-bash run.sh
+pip install . --break-system-packages
 ```
 
-Or manually:
+Then run:
 
 ```bash
-python3 -m venv venv && source venv/bin/activate
+ecost
+```
+
+On first run it will prompt for your electricity cost per kWh.
+
+Or manually (without installing):
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
@@ -36,23 +44,23 @@ python main.py
 ## Usage
 
 ```bash
-python main.py [-i INTERVAL_MS] [-p PRICE_PER_KWH] [--no-color]
+ecost [-i INTERVAL_MS]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-i, --interval` | 1000 | Polling interval in milliseconds |
-| `-p, --price` | 90.0 | Electricity price per kWh (PKR) |
-| `--no-color` | off | Disable color output |
+
+Electricity cost is stored in `~/.config/ecost/config.json` and set on first run.
 
 ## Keyboard Controls
 
 | Key | Action |
 |-----|--------|
-| `q` | Quit |
-| `p` | Pause / Resume |
+| `q` / `Esc` | Quit |
+| `p` | Pause |
+| `r` | Resume |
 | `h` | Toggle help in footer |
-| `Esc` | Quit |
 
 ## Layout
 
@@ -101,4 +109,4 @@ sudo udevadm control --reload-rules
 - DRAM and Storage power are **estimates** based on usage heuristics
 - CPU uses RAPL `energy_uj` counter (accurate) with k10temp fallback
 - GPU uses NVML `nvmlDeviceGetPowerUsage()` (accurate, milliwatt precision)
-- Cost is calculated as `kWh × price_per_kwh` (default: Pakistani rate Rs. 90/kWh)
+- Cost is calculated as `kWh × cost_per_kwh` (set on first run, stored in `~/.config/ecost/config.json`)
