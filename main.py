@@ -539,13 +539,13 @@ def main():
     args = parser.parse_args()
 
     # Get cost from config (prompts on first run)
-    cost_per_kwh = get_cost_per_kwh()
-    currency = get_currency()
+    cost = get_cost_per_kwh()
+    curr = get_currency()
 
     class Args:
         interval = args.interval
-        cost_per_kwh = cost_per_kwh
-        currency = currency
+        cost_per_kwh = cost
+        currency = curr
     curses.wrapper(lambda stdscr: curses_main(stdscr, Args()))
 
 

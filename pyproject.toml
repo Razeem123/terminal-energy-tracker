@@ -14,3 +14,6 @@ dependencies = [
 
 [project.scripts]
 ecost = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
