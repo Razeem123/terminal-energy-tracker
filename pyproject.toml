@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecost"
+version = "1.0.0"
+description = "Terminal power tracker — RAPL + NVML sensors, curses TUI"
+requires-python = ">=3.10"
+dependencies = [
+    "psutil>=5.9.0",
+    "nvidia-ml-py>=12.535.0",
+]
+
+[project.scripts]
+ecost = "main:main"
